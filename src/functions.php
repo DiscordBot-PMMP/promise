@@ -321,12 +321,8 @@ function reduce($promisesOrValues, callable $reduceFunc, $initialValue = null)
 /**
  * @internal
  */
-function _checkTypehint(callable $callback, $object)
+function _checkTypehint(callable $callback, \Throwable $reason)
 {
-    if (!\is_object($object)) {
-        return true;
-    }
-
     if (\is_array($callback)) {
         $callbackReflection = new \ReflectionMethod($callback[0], $callback[1]);
     } elseif (\is_object($callback) && !$callback instanceof \Closure) {
@@ -341,11 +337,33 @@ function _checkTypehint(callable $callback, $object)
         return true;
     }
 
-    $expectedException = $parameters[0];
+    $type = $parameters[0]->getType();
 
-    if (!$expectedException->getClass()) {
+    if (!$type) {
         return true;
     }
 
-    return $expectedException->getClass()->isInstance($object);
+    $types = [$type];
+
+    if ($type instanceof \ReflectionUnionType) {
+        $types = $type->getTypes();
+    }
+
+    $mismatched = false;
+
+    foreach ($types as $type) {
+        if (!$type || $type->isBuiltin()) {
+            continue;
+        }
+
+        $expectedClass = $type->getName();
+
+        if ($reason instanceof $expectedClass) {
+            return true;
+        }
+
+        $mismatched = true;
+    }
+
+    return !$mismatched;
 }
